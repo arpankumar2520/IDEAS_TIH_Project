@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[13]:
+# In[1]:
 
 
 import os
@@ -9,7 +9,6 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 import matplotlib.pyplot as plt
-from scipy.stats import norm
 from scipy.stats import pearsonr, spearmanr
 
 # Load and preprocess images
@@ -30,11 +29,7 @@ def load_and_preprocess_images(ref_path, test_path):
 
 # Compare images using SSIM and pixel-wise differences
 def compare_images(ref_gray, test_gray):
-    # Measure SSIM
     similarity_index, _ = ssim(ref_gray, test_gray, full=True)
-    print(f'Structural Similarity Index (SSIM): {similarity_index:.4f}')
-    
-    # Calculate pixel-wise differences
     diff_image = cv2.absdiff(ref_gray, test_gray)
     diff_image_normalized = cv2.normalize(diff_image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     
@@ -44,53 +39,8 @@ def compare_images(ref_gray, test_gray):
 def determine_ssim_threshold(ssim_scores):
     mean_ssim = np.mean(ssim_scores)
     std_ssim = np.std(ssim_scores)
-    
-    # Using mean + standard deviation as threshold
     threshold = mean_ssim + std_ssim
-    print(f"Threshold for SSIM classification: {threshold:.4f}")
     return threshold
-
-# Visualize the SSIM score distribution
-def visualize_ssim_distribution(partial_ssim_scores, full_ssim_score, threshold=None):
-    plt.figure(figsize=(12, 8))
-    plt.hist(partial_ssim_scores, bins=20, alpha=0.7, label="Partial Insertion SSIMs", color='red')
-    plt.axvline(np.mean(partial_ssim_scores), color='blue', linestyle='dashed', linewidth=2, label="Mean SSIM (Partial Insertion)")
-    plt.axvline(full_ssim_score, color='green', linestyle='dashed', linewidth=2, label="SSIM (Full Insertion)")
-    if threshold is not None:
-        plt.axvline(threshold, color='purple', linestyle='dashed', linewidth=2, label=f"Threshold ({threshold:.4f})")
-    plt.legend()
-    plt.title('SSIM Score Distribution for Partially Inserted Magnets')
-    plt.xlabel('SSIM Score')
-    plt.ylabel('Frequency')
-    plt.show()
-
-    # 3D Histogram
-    fig = plt.figure(figsize=(12, 9))
-    ax = fig.add_subplot(111, projection='3d')
-    hist, bins = np.histogram(partial_ssim_scores, bins=20, density=True)
-    bin_centers = (bins[:-1] + bins[1:]) / 2
-
-    ax.bar(bin_centers, hist, width=bins[1] - bins[0], alpha=0.7, color='red', label='Partial Insertion SSIMs')
-
-    mu, std = norm.fit(partial_ssim_scores)
-    x = np.linspace(min(partial_ssim_scores), max(partial_ssim_scores), 100)
-    p = norm.pdf(x, mu, std)
-    ax.plot(x, p, 'k', linewidth=2)
-
-    if threshold is not None:
-        ax.axvline(x=threshold, color='purple', linestyle='--', label=f'Threshold = {threshold:.4f}')
-
-    ax.set_xlabel('SSIM Score')
-    ax.set_ylabel('Frequency')
-    ax.set_zlabel('Density')
-    ax.legend()
-    plt.show()
-
-# Surface roughness analysis
-def analyze_surface(depth_map):
-    surface_roughness = np.std(depth_map)
-    print(f'Surface Roughness (Std Dev): {surface_roughness:.4f}')
-    return surface_roughness
 
 # Feature matching
 def feature_matching(ref_gray, test_gray):
@@ -102,63 +52,71 @@ def feature_matching(ref_gray, test_gray):
     matches = sorted(matches, key=lambda x: x.distance)
     return matches, keypoints_ref, keypoints_test
 
+# Surface roughness analysis
+def analyze_surface(depth_map):
+    surface_roughness = np.std(depth_map)
+    return surface_roughness
+
 # Depth analysis
 def depth_analysis(ref_gray, test_gray):
     disparity_map = cv2.absdiff(ref_gray, test_gray)
     return disparity_map
 
-# Calculate correlation metrics (Linear and Non-Linear)
-def calculate_correlation(ref_gray, test_gray):
-    ref_flat = ref_gray.flatten()
-    test_flat = test_gray.flatten()
-    
-    # Pearson (Linear Correlation)
-    linear_corr, _ = pearsonr(ref_flat, test_flat)
-    # Spearman (Non-linear Correlation)
-    nonlinear_corr, _ = spearmanr(ref_flat, test_flat)
-    
-    print(f'Linear Correlation (Pearson): {linear_corr:.4f}')
-    print(f'Non-linear Correlation (Spearman): {nonlinear_corr:.4f}')
-    
-    return linear_corr, nonlinear_corr
-
 # Magnet insertion percentage
 def determine_magnet_insertion(test_gray):
-    threshold = 50  # Threshold to identify inserted magnets
+    threshold = 130  # Threshold to identify inserted magnets
     inserted_pixels = np.sum(test_gray < threshold)
     total_pixels = test_gray.size
     insertion_percentage = (inserted_pixels / total_pixels) * 100
-    print(f'Magnet Insertion Percentage: {insertion_percentage:.2f}%')
     return insertion_percentage
 
 # Calculate alignment score
 def calculate_alignment_score(ssim_index):
     alignment_score = ssim_index * 100
-    print(f'Alignment Score: {alignment_score:.2f}%')
     return alignment_score
 
 # Decision-making system
 def decision_making(ssim_index, insertion_percentage, surface_roughness):
+    # Define thresholds
     threshold_ssim = 0.9
-    threshold_insertion = 0.0270
+    threshold_insertion = 0.4326  # Example threshold for full insertion percentage
     threshold_roughness = 22.3971
-    
+
+    # Decision logic based on SSIM, insertion percentage, and surface roughness
     if ssim_index < threshold_ssim and insertion_percentage < threshold_insertion:
-        print("Decision: Assembly issue detected (low SSIM ).")
+        decision = (
+            f"Assembly issue detected:Material is partially inserted Low SSIM score ({ssim_index:.4f}) below threshold ({threshold_ssim}), "
+            f"and material is partially inserted (approx. {insertion_percentage:.2f}% of required insertion)."
+        )
     elif ssim_index < threshold_ssim:
-        print("Decision: Assembly issue detected (low SSIM and magnet not fully inserted).")
+        decision = (
+            f"Material is partially inserted: Low SSIM score ({ssim_index:.4f}) below threshold ({threshold_ssim}). "
+            f"Material insertion percentage is approx. {insertion_percentage:.2f}%."
+        )
     elif insertion_percentage < threshold_insertion:
-        print("Decision: Magnet not fully inserted.")
+        decision = (
+            f"Material is partially inserted: Insertion percentage is approx. {insertion_percentage:.2f}%, "
+            f"below the full insertion threshold of {threshold_insertion * 100:.2f}%."
+        )
     elif surface_roughness > threshold_roughness:
-        print("Decision: Surface quality issue detected (high surface roughness).")
+        decision = (
+            f"Surface quality issue detected: Surface roughness ({surface_roughness:.4f}) exceeds acceptable threshold "
+            f"({threshold_roughness}). Material insertion is approx. {insertion_percentage:.2f}%."
+        )
     else:
-        print("Decision: Assembly is acceptable.")
+        decision = (
+            f"Assembly is acceptable: Material is fully inserted with insertion percentage of approx. {insertion_percentage:.2f}% "
+            f"(meets or exceeds {threshold_insertion * 100:.2f}% threshold), SSIM score is {ssim_index:.4f}, "
+            f"and surface roughness is within acceptable limits ({surface_roughness:.4f} <= {threshold_roughness})."
+        )
+    
+    return decision
 
 # Main execution function
 def main():
-    ref_path = 'magnet_insertion-proper.jpg'  # Path to the fully inserted magnet image
-    input_folder = 'new_images'  # Folder containing test images (partially inserted magnets)
-    
+    ref_path = input("Enter the reference image path (fully inserted magnet): ")
+    input_folder = input("Enter the folder path containing test images: ")
+
     # Lists to store SSIM scores
     full_insertion_ssims = []
     partial_insertion_ssims = []
@@ -169,7 +127,6 @@ def main():
     # Process each image
     for test_image_name in test_images:
         test_path = os.path.join(input_folder, test_image_name)
-        print(f"\nProcessing: {test_image_name}")
         
         # Load and preprocess images
         ref_image, test_image, ref_gray, test_gray = load_and_preprocess_images(ref_path, test_path)
@@ -185,7 +142,6 @@ def main():
         
         # Calculate and display the threshold for the current image
         current_threshold = determine_ssim_threshold(partial_insertion_ssims)
-        print(f"Current SSIM Threshold for {test_image_name}: {current_threshold:.4f}")
         
         # Feature matching
         matches, keypoints_ref, keypoints_test = feature_matching(ref_gray, test_gray)
@@ -196,9 +152,6 @@ def main():
         # Surface roughness analysis
         surface_roughness = analyze_surface(disparity_map)
         
-        # Linear and Non-linear Correlation
-        linear_corr, nonlinear_corr = calculate_correlation(ref_gray, test_gray)
-        
         # Magnet insertion percentage
         insertion_percentage = determine_magnet_insertion(test_gray)
         
@@ -206,10 +159,19 @@ def main():
         alignment_score = calculate_alignment_score(ssim_index)
         
         # Decision-making
-        decision_making(ssim_index, insertion_percentage, surface_roughness)
+        decision = decision_making(ssim_index, insertion_percentage, surface_roughness)
         
-        # Visualize results with larger images
-        plt.figure(figsize=(18, 12))  # Larger figure for better visibility
+        # Output the results in the specified format
+        print(f"\nProcessing: {test_image_name}")
+        #print(f"SSIM Score: {ssim_index:.4f}")
+        #print(f"Current SSIM Threshold: {current_threshold:.4f}")
+        #print(f"Magnet Insertion Percentage: {insertion_percentage:.2f}%")
+        #print(f"Surface Roughness (Std Dev): {surface_roughness:.4f}")
+        #print(f"Alignment Score: {alignment_score:.2f}%")
+        print(f"Decision: {decision}")
+        
+        # Visualize results
+        plt.figure(figsize=(18, 12))
         plt.subplot(2, 3, 1)
         plt.title('Reference Image')
         plt.imshow(cv2.cvtColor(ref_image, cv2.COLOR_BGR2RGB))
@@ -235,21 +197,10 @@ def main():
     # Compute SSIM score for fully inserted magnet (reference image)
     fully_inserted_image = load_and_preprocess_images(ref_path, ref_path)[2]
     full_ssim_score = compare_images(fully_inserted_image, fully_inserted_image)[1]
-    
-    # Visualize SSIM score distribution
-    visualize_ssim_distribution(partial_insertion_ssims, full_ssim_score, threshold=ssim_threshold)
-    
-    print(f"SSIM score for fully inserted magnet: {full_ssim_score:.4f}")
-    print(f"The SSIM score for the fully inserted magnet falls {'above' if full_ssim_score > ssim_threshold else 'below'} the threshold.")
 
+# Run the main function
 if __name__ == "__main__":
     main()
-
-
-# In[ ]:
-
-
-
 
 
 # In[ ]:
