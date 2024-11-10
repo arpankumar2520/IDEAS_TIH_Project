@@ -1,15 +1,22 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[5]:
 
 
 import os
 import cv2
+import json
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
+
+# Load configuration
+def load_config(config_path='config.json'):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    return config['ref_path'], config['test_dir']
 
 # Load and preprocess images
 def load_and_preprocess_images(ref_path, test_path):
@@ -85,7 +92,7 @@ def decision_making(ssim_index, insertion_percentage, surface_roughness):
     # Decision logic based on SSIM, insertion percentage, and surface roughness
     if ssim_index < threshold_ssim and insertion_percentage < threshold_insertion:
         decision = (
-            f"Assembly issue detected:Material is partially inserted Low SSIM score ({ssim_index:.4f}) below threshold ({threshold_ssim}), "
+            f"Assembly issue detected: Material is partially inserted. Low SSIM score ({ssim_index:.4f}) below threshold ({threshold_ssim}), "
             f"and material is partially inserted (approx. {insertion_percentage:.2f}% of required insertion)."
         )
     elif ssim_index < threshold_ssim:
@@ -114,8 +121,8 @@ def decision_making(ssim_index, insertion_percentage, surface_roughness):
 
 # Main execution function
 def main():
-    ref_path = input("Enter the reference image path (fully inserted magnet): ")
-    input_folder = input("Enter the folder path containing test images: ")
+    # Load configuration paths
+    ref_path, input_folder = load_config()
 
     # Lists to store SSIM scores
     full_insertion_ssims = []
@@ -201,10 +208,4 @@ def main():
 # Run the main function
 if __name__ == "__main__":
     main()
-
-
-# In[ ]:
-
-
-
 
